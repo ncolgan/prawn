@@ -48,6 +48,12 @@ module Prawn
     def font(name=nil, options={})
       return((defined?(@font) && @font) || font("Helvetica")) if name.nil?
 
+      if name.is_a?(Hash) && options.empty?
+        options = name
+        font = (defined?(@font) && @font) || font("Helvetica")
+        name = font.family
+      end
+
       if state.pages.empty? && !state.page.in_stamp_stream?
         raise Prawn::Errors::NotOnPage 
       end

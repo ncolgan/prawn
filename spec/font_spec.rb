@@ -72,6 +72,30 @@ describe "font style support" do
     lambda{ pdf_without_page.font "Helvetica" }.
       should raise_error(Prawn::Errors::NotOnPage)
   end
+
+  it "should allow specifying style without providing a name" do
+    @pdf.font :style => :bold
+    @pdf.text "In Helvetica bold"
+
+    @pdf.font 'Courier'
+
+    @pdf.font :style => :bold
+    @pdf.text "In Courier bold"
+
+    @pdf.font :style => :bold_italic
+    @pdf.text "In Courier bold-italic"
+
+    @pdf.font :style => :italic
+    @pdf.text "In Courier italic"
+
+    @pdf.font :style => :normal
+    @pdf.text "In Normal Courier"
+
+    text = PDF::Inspector::Text.analyze(@pdf.render)
+    text.font_settings.map { |e| e[:name] }.should ==
+      [:"Helvetica-Bold", :"Courier-Bold", :"Courier-BoldOblique",
+       :"Courier-Oblique", :"Courier"]
+  end
   
   it "should allow specifying font style by style name and font family" do    
     @pdf.font "Courier", :style => :bold
