@@ -88,6 +88,8 @@ module Prawn
 
           data.read(4)  # Skip the CRC
         end
+
+        @img_data = Zlib::Inflate.inflate(@img_data)
       end
 
       # number of color components to each pixel
@@ -168,27 +170,31 @@ module Prawn
           :Subtype          => :Image,
           :Height           => height,
           :Width            => width,
-          :BitsPerComponent => bits,
-          :Length           => img_data.size,
-          :Filter           => :FlateDecode
+          :BitsPerComponent => bits
         )
-
-        unless alpha_channel
-          obj.data[:DecodeParms] = {:Predictor => 15,
-                                    :Colors    => colors,
-                                    :BitsPerComponent => bits,
-                                    :Columns   => width}
-        end
 
         # append the actual image data to the object as a stream
         obj << img_data
+
+        if alpha_channel
+          obj.stream.compress!
+        else
+          obj.stream.filters << {
+            :FlateDecode => {
+              :Predictor => 15,
+              :Colors    => colors,
+              :BitsPerComponent => bits,
+              :Columns   => width
+            }
+          }
+        end
 
         # sort out the colours of the image
         if palette.empty?
           obj.data[:ColorSpace] = color
         else
           # embed the colour palette in the PDF as a object stream
-          palette_obj = document.ref!(:Length => palette.size)
+          palette_obj = document.ref!({})
           palette_obj << palette
 
           # build the color space array for the image
@@ -234,12 +240,11 @@ module Prawn
             :Height           => height,
             :Width            => width,
             :BitsPerComponent => alpha_channel_bits,
-            :Length           => alpha_channel.size,
-            :Filter           => :FlateDecode,
             :ColorSpace       => :DeviceGray,
             :Decode           => [0, 1]
           )
-          smask_obj << alpha_channel
+          smask_obj.stream << alpha_channel
+          smask_obj.stream.compress!
           obj.data[:SMask] = smask_obj
         end
 
@@ -262,7 +267,8 @@ module Prawn
       private
 
       def unfilter_image_data
-        data = Zlib::Inflate.inflate(@img_data).bytes
+        data = @img_data.dup
+
         @img_data = ""
         @alpha_channel = ""
 
@@ -273,13 +279,13 @@ module Prawn
         row_data = [] # reused for each row of the image
         paeth, pa, pb, pc = nil
 
-        data.each do |byte|
+        data.bytes.each do |byte|
           # accumulate a whole scanline of bytes, and then process it all at once
           # we could do this with Enumerable#each_slice, but it allocates memory,
           #   and we are trying to avoid that
           row_data << byte
           next if row_data.length < scanline_length
-          
+
           filter = row_data.shift
           case filter
           when 0 # None
@@ -354,10 +360,6 @@ module Prawn
             @alpha_channel << pixel[color_byte_size, alpha_byte_size].pack("C*")
           end
         end
-
-        # compress the data
-        @img_data = Zlib::Deflate.deflate(@img_data)
-        @alpha_channel = Zlib::Deflate.deflate(@alpha_channel)
       end
     end
   end

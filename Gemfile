@@ -1,4 +1,4 @@
-source :rubygems
+source "https://rubygems.org"
 
 gem "ttfunk", "~>1.0.3"
 gem "pdf-reader", "~> 1.2"
@@ -11,7 +11,7 @@ group :development do
 end
 
 group :test do
-  gem "pdf-inspector", "~> 1.0.2", :require => "pdf/inspector"
+  gem "pdf-inspector", "~> 1.1.0", :require => "pdf/inspector"
   gem "rspec"
   gem "mocha", :require => false
   gem "rake"

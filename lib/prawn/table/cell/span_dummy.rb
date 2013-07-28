@@ -69,6 +69,10 @@ module Prawn
           @master_cell.border_bottom_width = val if bottommost?
         end
 
+        def background_color
+          @master_cell.background_color
+        end
+
         private
 
         # Are we on the right border of the span?
