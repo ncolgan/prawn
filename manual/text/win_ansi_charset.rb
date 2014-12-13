@@ -8,7 +8,7 @@ require File.expand_path(File.join(File.dirname(__FILE__),
                                    %w[.. example_helper]))
 
 filename = File.basename(__FILE__).gsub('.rb', '.pdf')
-Prawn::Example.generate(filename) do
+Prawn::ManualBuilder::Example.generate(filename) do
   FONT_SIZE = 9.5
 
   x = 0
@@ -50,7 +50,8 @@ Prawn::Example.generate(filename) do
         when :center then offset = (total_width - width)/2
         end
 
-        text_box(field, :at => [dx + offset, y], :skip_encoding => true)
+        text_box(field.force_encoding("windows-1252").encode("UTF-8"),
+          :at => [dx + offset, y])
       end
 
       dx += total_width

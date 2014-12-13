@@ -30,6 +30,8 @@ module Prawn
     #
     module Transparency
 
+      # @group Stable API
+
       # Sets the <tt>opacity</tt> and <tt>stroke_opacity</tt> for all
       # the content within the <tt>block</tt>
       # If <tt>stroke_opacity</tt> is not provided, then it takes on
@@ -52,13 +54,13 @@ module Prawn
       #   end
       #
       def transparent(opacity, stroke_opacity=opacity, &block)
-        min_version(1.4)
+        renderer.min_version(1.4)
 
         opacity        = [[opacity, 0.0].max, 1.0].min
         stroke_opacity = [[stroke_opacity, 0.0].max, 1.0].min
 
         save_graphics_state
-        add_content "/#{opacity_dictionary_name(opacity, stroke_opacity)} gs"
+        renderer.add_content "/#{opacity_dictionary_name(opacity, stroke_opacity)} gs"
         yield
         restore_graphics_state
       end
@@ -86,7 +88,7 @@ module Prawn
                                     )
 
           dictionary_name = "Tr#{next_opacity_dictionary_id}"
-          opacity_dictionary_registry[key] = { :name => dictionary_name, 
+          opacity_dictionary_registry[key] = { :name => dictionary_name,
                                                :obj  => dictionary }
         end
 

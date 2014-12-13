@@ -5,8 +5,8 @@ require File.join(File.expand_path(File.dirname(__FILE__)), "spec_helper")
 describe "Core::Text::Formatted::LineWrap#wrap_line" do
   before(:each) do
     create_pdf
-    @arranger = Prawn::Core::Text::Formatted::Arranger.new(@pdf)
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @arranger = Prawn::Text::Formatted::Arranger.new(@pdf)
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
     @one_word_width = 50
   end
   it "should strip leading and trailing spaces" do
@@ -113,11 +113,11 @@ describe "Core::Text::Formatted::LineWrap#wrap_line" do
                                   :width => @one_word_width,
                                   :document => @pdf)
     expected = @pdf.font.normalize_encoding("hello#{Prawn::Text::SHY}")
-    expected.force_encoding("utf-8") if "".respond_to?(:force_encoding)
+    expected.force_encoding(Encoding::UTF_8)
     string.should == expected
 
     @pdf.font("#{Prawn::DATADIR}/fonts/DejaVuSans.ttf")
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
 
     string = "hello#{Prawn::Text::SHY}world"
     array = [{ :text => string }]
@@ -128,25 +128,43 @@ describe "Core::Text::Formatted::LineWrap#wrap_line" do
     string.should == "hello#{Prawn::Text::SHY}"
   end
 
-  it "should not display soft hyphens except at the end of a line" do
-    string = @pdf.font.normalize_encoding("hello#{Prawn::Text::SHY}world")
-    array = [{ :text => string }]
-    @arranger.format_array = array
-    string = @line_wrap.wrap_line(:arranger => @arranger,
-                                  :width => 300,
-                                  :document => @pdf)
-    string.should == "helloworld"
+  it "should ignore width of a soft-hyphen during adding fragments to line", :issue =>775 do
+    hyphen_string = "Hy#{Prawn::Text::SHY}phe#{Prawn::Text::SHY}nat#{Prawn::Text::SHY}ions "
+    string1 = @pdf.font.normalize_encoding(hyphen_string * 5)
+    string2 = @pdf.font.normalize_encoding("Hyphenations " * 3 + hyphen_string)
 
+    array1 = [{text: string1}]
+    array2 = [{text: string2}]
+
+    @arranger.format_array = array1
+
+    res1 = @line_wrap.wrap_line(:arranger => @arranger,
+                                :width => 300,
+                                :document => @pdf)
+
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
+
+    @arranger.format_array = array2
+
+    res2 = @line_wrap.wrap_line(:arranger => @arranger,
+                                :width => 300,
+                                :document => @pdf)
+    res1.should == res2
+  end
+
+  it "should not display soft hyphens except at the end of a line " +
+     "for more than one element in format_array", :issue => 347 do
     @pdf.font("#{Prawn::DATADIR}/fonts/DejaVuSans.ttf")
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
 
-    string = "hello#{Prawn::Text::SHY}world"
-    array = [{ :text => string }]
+    string1 = @pdf.font.normalize_encoding("hello#{Prawn::Text::SHY}world ")
+    string2 = @pdf.font.normalize_encoding("hi#{Prawn::Text::SHY}earth")
+    array = [{ :text => string1 }, { :text => string2 }]
     @arranger.format_array = array
     string = @line_wrap.wrap_line(:arranger => @arranger,
                                   :width => 300,
                                   :document => @pdf)
-    string.should == "helloworld"
+    string.should == "helloworld hiearth"
   end
 
   it "should not break before a hard hyphen that follows a word" do
@@ -167,7 +185,7 @@ describe "Core::Text::Formatted::LineWrap#wrap_line" do
     string.should == "hello"
 
     @pdf.font("#{Prawn::DATADIR}/fonts/DejaVuSans.ttf")
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
     enough_width_for_hello_world = 68
 
     array = [{ :text => "hello world" }]
@@ -202,11 +220,11 @@ describe "Core::Text::Formatted::LineWrap#wrap_line" do
                                   :width => @one_word_width,
                                   :document => @pdf)
     expected = @pdf.font.normalize_encoding("hello#{Prawn::Text::SHY}")
-    expected.force_encoding("utf-8") if "".respond_to?(:force_encoding)
+    expected.force_encoding(Encoding::UTF_8)
     string.should == expected
 
     @pdf.font("#{Prawn::DATADIR}/fonts/DejaVuSans.ttf")
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
 
     string = "hello#{Prawn::Text::SHY}-"
     array = [{ :text => string }]
@@ -224,13 +242,24 @@ describe "Core::Text::Formatted::LineWrap#wrap_line" do
                                   :document => @pdf)
     string.should == "hello#{Prawn::Text::SHY}"
   end
+
+  it "should process UTF-8 chars", :unresolved, :issue => 693 do
+    array = [{ :text => "Ｔｅｓｔ" }]
+    @arranger.format_array = array
+
+    # Should not raise an encoding error
+    string = @line_wrap.wrap_line(:arranger => @arranger,
+                                  :width => 300,
+                                  :document => @pdf)
+    string.should == "Ｔｅｓｔ"
+  end
 end
 
 describe "Core::Text::Formatted::LineWrap#space_count" do
   before(:each) do
     create_pdf
-    @arranger = Prawn::Core::Text::Formatted::Arranger.new(@pdf)
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @arranger = Prawn::Text::Formatted::Arranger.new(@pdf)
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
   end
   it "should return the number of spaces in the last wrapped line" do
     array = [{ :text => "hello world, " },
@@ -255,7 +284,7 @@ end
 describe "Core::Text::Formatted::LineWrap" do
   before(:each) do
     create_pdf
-    @arranger = Prawn::Core::Text::Formatted::Arranger.new(@pdf)
+    @arranger = Prawn::Text::Formatted::Arranger.new(@pdf)
     array = [{ :text => "hello\nworld\n\n\nhow are you?" },
              { :text => "\n" },
              { :text => "\n" },
@@ -265,7 +294,7 @@ describe "Core::Text::Formatted::LineWrap" do
              { :text => "\n" },
              { :text => "" }]
     @arranger.format_array = array
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
   end
   it "should only return an empty string if nothing fit or there" +
      "was nothing to wrap" do
@@ -280,13 +309,17 @@ describe "Core::Text::Formatted::LineWrap" do
                                :document => @pdf)
     line.should be_empty
   end
+  it "should tokenize a string using the scan_pattern" do
+    tokens = @line_wrap.tokenize("one two three")
+    tokens.length.should == 6
+  end
 end
 
 describe "Core::Text::Formatted::LineWrap#paragraph_finished?" do
   before(:each) do
     create_pdf
-    @arranger = Prawn::Core::Text::Formatted::Arranger.new(@pdf)
-    @line_wrap = Prawn::Core::Text::Formatted::LineWrap.new
+    @arranger = Prawn::Text::Formatted::Arranger.new(@pdf)
+    @line_wrap = Prawn::Text::Formatted::LineWrap.new
     @one_word_width = 50
   end
   it "should be_false when the last printed line is not the end of the paragraph" do
@@ -331,3 +364,4 @@ describe "Core::Text::Formatted::LineWrap#paragraph_finished?" do
     @line_wrap.paragraph_finished?.should == true
   end
 end
+

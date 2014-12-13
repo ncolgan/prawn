@@ -6,12 +6,20 @@
 #
 # This is free software. Please see the LICENSE and COPYING files for details.
 
-require 'prawn/encoding'
-require 'afm'
+require_relative "../encoding"
 
 module Prawn
   class Font
+
+    # @private
+
     class AFM < Font
+      class << self
+        attr_accessor :hide_m17n_warning
+      end
+
+      self.hide_m17n_warning = false
+
       BUILT_INS = %w[ Courier Helvetica Times-Roman Symbol ZapfDingbats
                       Courier-Bold Courier-Oblique Courier-BoldOblique
                       Times-Bold Times-Italic Times-BoldItalic
@@ -42,28 +50,29 @@ module Prawn
 
         super
 
-        @@winansi   ||= Prawn::Encoding::WinAnsi.new # parse data/encodings/win_ansi.txt once only
         @@font_data ||= SynchronizedCache.new        # parse each ATM font file once only
 
         file_name = @name.dup
         file_name << ".afm" unless file_name =~ /\.afm$/
         file_name = file_name[0] == ?/ ? file_name : find_font(file_name)
 
-        font_data = @@font_data[file_name] ||= ::AFM::Font.new(file_name)
-        @glyph_table     = build_glyph_table(font_data)
-        @kern_pairs      = font_data.kern_pairs
-        @kern_pair_table = build_kern_pair_table(@kern_pairs)
-        @attributes      = font_data.metadata
+        font_data = @@font_data[file_name] ||= parse_afm(file_name)
+        @glyph_widths    = font_data[:glyph_widths]
+        @glyph_table     = font_data[:glyph_table]
+        @bounding_boxes  = font_data[:bounding_boxes]
+        @kern_pairs      = font_data[:kern_pairs]
+        @kern_pair_table = font_data[:kern_pair_table]
+        @attributes      = font_data[:attributes]
 
-        @ascender  = @attributes["Ascender"].to_i
-        @descender = @attributes["Descender"].to_i
+        @ascender  = @attributes["ascender"].to_i
+        @descender = @attributes["descender"].to_i
         @line_gap  = Float(bbox[3] - bbox[1]) - (@ascender - @descender)
       end
 
       # The font bbox, as an array of integers
       #
       def bbox
-        @bbox ||= @attributes['FontBBox'].split(/\s+/).map { |e| Integer(e) }
+        @bbox ||= @attributes['fontbbox'].split(/\s+/).map { |e| Integer(e) }
       end
 
       # NOTE: String *must* be encoded as WinAnsi
@@ -89,12 +98,18 @@ module Prawn
       # string. Changes the encoding in-place, so the argument itself
       # is replaced with a string in WinAnsi encoding.
       #
-      def normalize_encoding(text) 
-        enc = @@winansi
-        text.unpack("U*").collect { |i| enc[i] }.pack("C*")
-      rescue ArgumentError
+      def normalize_encoding(text)
+        text.encode("windows-1252")
+      rescue ::Encoding::InvalidByteSequenceError,
+             ::Encoding::UndefinedConversionError
+
         raise Prawn::Errors::IncompatibleStringEncoding,
-          "Arguments to text methods must be UTF-8 encoded"
+          "Your document includes text that's not compatible with the Windows-1252 character set.\n"+
+          "If you need full UTF-8 support, use TTF fonts instead of PDF's built-in fonts\n."
+      end
+
+      def to_utf8(text)
+        text.encode("UTF-8")
       end
 
       # Returns the number of characters in +str+ (a WinAnsi-encoded string).
@@ -120,11 +135,9 @@ module Prawn
       end
 
       def glyph_present?(char)
-        if char == "_"
-          true
-        else
-          normalize_encoding(char) != "_"
-        end
+        !!normalize_encoding(char)
+      rescue Prawn::Errors::IncompatibleStringEncoding
+        false
       end
 
       private
@@ -141,7 +154,7 @@ module Prawn
       end
 
       def symbolic?
-        attributes["CharacterSet"] == "Special"
+        attributes["characterset"] == "Special"
       end
 
       def find_font(file)
@@ -150,6 +163,61 @@ module Prawn
         raise Prawn::Errors::UnknownFont,
           "Couldn't find the font: #{file} in any of:\n" +
            self.class.metrics_path.join("\n")
+      end
+
+      def parse_afm(file_name)
+        data    = {:glyph_widths => {}, :bounding_boxes => {}, :kern_pairs => {}, :attributes => {}}
+        section = []
+
+        File.foreach(file_name) do |line|
+          case line
+          when /^Start(\w+)/
+            section.push $1
+            next
+          when /^End(\w+)/
+            section.pop
+            next
+          end
+
+          case section
+          when ["FontMetrics", "CharMetrics"]
+            next unless line =~ /^CH?\s/
+
+            name                        = line[/\bN\s+(\.?\w+)\s*;/, 1]
+            data[:glyph_widths][name]   = line[/\bWX\s+(\d+)\s*;/, 1].to_i
+            data[:bounding_boxes][name] = line[/\bB\s+([^;]+);/, 1].to_s.rstrip
+          when ["FontMetrics", "KernData", "KernPairs"]
+            next unless line =~ /^KPX\s+(\.?\w+)\s+(\.?\w+)\s+(-?\d+)/
+            data[:kern_pairs][[$1, $2]] = $3.to_i
+          when ["FontMetrics", "KernData", "TrackKern"],
+            ["FontMetrics", "Composites"]
+            next
+          else
+            parse_generic_afm_attribute(line, data)
+          end
+        end
+
+        # process data parsed from AFM file to build tables which
+        #   will be used when measuring and kerning text
+        data[:glyph_table] = (0..255).map do |i|
+          data[:glyph_widths][Encoding::WinAnsi::CHARACTERS[i]].to_i
+        end
+
+        character_hash = Hash[Encoding::WinAnsi::CHARACTERS.zip((0..Encoding::WinAnsi::CHARACTERS.size).to_a)]
+        data[:kern_pair_table] = data[:kern_pairs].inject({}) do |h,p|
+          h[p[0].map { |n| character_hash[n] }] = p[1]
+          h
+        end
+
+        data.each_value { |hash| hash.freeze }
+        data.freeze
+      end
+
+      def parse_generic_afm_attribute(line, hash)
+        line =~ /(^\w+)\s+(.*)/
+        key, value = $1.to_s.downcase, $2
+
+        hash[:attributes][key] = hash[:attributes][key] ? Array(hash[:attributes][key]) << value : value
       end
 
       # converts a string into an array with spacing offsets
@@ -161,38 +229,23 @@ module Prawn
         kerned = [[]]
         last_byte = nil
 
-        string.bytes do |byte|
+        string.each_byte do |byte|
           if k = last_byte && @kern_pair_table[[last_byte, byte]]
             kerned << -k << [byte]
           else
             kerned.last << byte
-          end         
+          end
           last_byte = byte
         end
 
-        kerned.map { |e| 
+        kerned.map { |e|
           e = (Array === e ? e.pack("C*") : e)
-          e.respond_to?(:force_encoding) ? e.force_encoding("Windows-1252") : e  
+          e.respond_to?(:force_encoding) ? e.force_encoding(::Encoding::Windows_1252) : e
         }
       end
-      
-      def build_kern_pair_table(kern_pairs)
-        character_hash = Hash[Encoding::WinAnsi::CHARACTERS.zip((0..Encoding::WinAnsi::CHARACTERS.size).to_a)]
-        kern_pairs.inject({}) do |h,p|
-          h[
-            [character_hash[p[0]], character_hash[p[1]]]
-          ] = p[2]
-          h
-        end
-      end
 
-      def build_glyph_table(font_data)
-        (0..255).map do |char|
-          metrics = font_data.metrics_for(char)
-          metrics ? metrics[:wx] : 0
-        end
-      end
-      
+      private
+
       def unscaled_width_of(string)
         string.bytes.inject(0) do |s,r|
           s + @glyph_table[r]

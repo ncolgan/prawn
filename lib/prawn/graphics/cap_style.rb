@@ -1,4 +1,4 @@
-# encoding: utf-8   
+# encoding: utf-8
 
 # cap_style.rb : Implements stroke cap styling
 #
@@ -9,6 +9,7 @@
 module Prawn
   module Graphics
     module CapStyle
+      # @group Stable API
 
       CAP_STYLES = { :butt => 0, :round => 1, :projecting_square => 2 }
 
@@ -30,16 +31,16 @@ module Prawn
 
       private
 
-      def current_cap_style  
+      def current_cap_style
         graphic_state.cap_style
       end
 
-      def current_cap_style=(style)  
+      def current_cap_style=(style)
         graphic_state.cap_style = style
       end
 
       def write_stroke_cap_style
-        add_content "#{CAP_STYLES[current_cap_style]} J"
+        renderer.add_content "#{CAP_STYLES[current_cap_style]} J"
       end
     end
   end

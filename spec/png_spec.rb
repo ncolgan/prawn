@@ -98,7 +98,15 @@ describe "When reading an RGB PNG file with transparency (color type 2)" do
   end
 end
 
-# TODO: describe "When reading an indexed color PNG file wiih transparency (color type 3)"
+describe "When reading an indexed color PNG file "+
+         "wiih transparency (color type 3)" do
+
+  it "raises a not supported error" do
+    bin = File.binread("#{Prawn::DATADIR}/images/pal_bk.png")
+    expect { Prawn::Images::PNG.new(bin)}.to(
+      raise_error(Prawn::Errors::UnsupportedImageType))
+  end
+end
 
 describe "When reading an indexed color PNG file (color type 3)" do
 
@@ -131,7 +139,7 @@ describe "When reading a greyscale+alpha PNG file (color type 4)" do
 
   before(:each) do
     @filename = "#{Prawn::DATADIR}/images/page_white_text.png"
-    @data_filename = "#{Prawn::DATADIR}/images/page_white_text.dat"
+    @color_data_filename = "#{Prawn::DATADIR}/images/page_white_text.color"
     @alpha_data_filename = "#{Prawn::DATADIR}/images/page_white_text.alpha"
     @img_data = File.binread(@filename)
   end
@@ -151,14 +159,14 @@ describe "When reading a greyscale+alpha PNG file (color type 4)" do
   it "should correctly return the raw image data (with no alpha channel) from the image data chunk" do
     png = Prawn::Images::PNG.new(@img_data)
     png.split_alpha_channel!
-    data = Zlib::Inflate.inflate(File.binread(@data_filename))
+    data = File.binread(@color_data_filename)
     png.img_data.should == data
   end
 
   it "should correctly extract the alpha channel data from the image data chunk" do
     png = Prawn::Images::PNG.new(@img_data)
     png.split_alpha_channel!
-    data = Zlib::Inflate.inflate(File.binread(@alpha_data_filename))
+    data = File.binread(@alpha_data_filename)
     png.alpha_channel.should == data
   end
 end
@@ -167,7 +175,7 @@ describe "When reading an RGB+alpha PNG file (color type 6)" do
 
   before(:each) do
     @filename = "#{Prawn::DATADIR}/images/dice.png"
-    @data_filename = "#{Prawn::DATADIR}/images/dice.dat"
+    @color_data_filename = "#{Prawn::DATADIR}/images/dice.color"
     @alpha_data_filename = "#{Prawn::DATADIR}/images/dice.alpha"
     @img_data = File.binread(@filename)
   end
@@ -187,17 +195,14 @@ describe "When reading an RGB+alpha PNG file (color type 6)" do
   it "should correctly return the raw image data (with no alpha channel) from the image data chunk" do
     png = Prawn::Images::PNG.new(@img_data)
     png.split_alpha_channel!
-    data = Zlib::Inflate.inflate(File.binread(@data_filename))
-    # compare decompressed rather than compressed image data
-    # because JRuby's implementation of Zlib is different from MRI --
-    #   both generate valid gzipped data, but not bit-identical to each other
+    data = File.binread(@color_data_filename)
     png.img_data.should == data
   end
 
   it "should correctly extract the alpha channel data from the image data chunk" do
     png = Prawn::Images::PNG.new(@img_data)
     png.split_alpha_channel!
-    data = Zlib::Inflate.inflate(File.binread(@alpha_data_filename))
+    data = File.binread(@alpha_data_filename)
     png.alpha_channel.should == data
   end
 end
@@ -206,7 +211,7 @@ describe "When reading a 16bit RGB+alpha PNG file (color type 6)" do
 
   before(:each) do
     @filename = "#{Prawn::DATADIR}/images/16bit.png"
-    @data_filename = "#{Prawn::DATADIR}/images/16bit.dat"
+    @color_data_filename = "#{Prawn::DATADIR}/images/16bit.color"
     # alpha channel truncated to 8-bit
     @alpha_data_filename = "#{Prawn::DATADIR}/images/16bit.alpha"
     @img_data = File.binread(@filename)
@@ -227,14 +232,14 @@ describe "When reading a 16bit RGB+alpha PNG file (color type 6)" do
   it "should correctly return the raw image data (with no alpha channel) from the image data chunk" do
     png = Prawn::Images::PNG.new(@img_data)
     png.split_alpha_channel!
-    data = Zlib::Inflate.inflate(File.binread(@data_filename))
+    data = File.binread(@color_data_filename)
     png.img_data.should == data
   end
 
   it "should correctly extract the alpha channel data from the image data chunk" do
     png = Prawn::Images::PNG.new(@img_data)
     png.split_alpha_channel!
-    data = Zlib::Inflate.inflate(File.binread(@alpha_data_filename))
+    data = File.binread(@alpha_data_filename)
     png.alpha_channel.should == data
   end
 end

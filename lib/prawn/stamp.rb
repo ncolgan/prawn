@@ -28,6 +28,8 @@ module Prawn
   #
   module Stamp
 
+    # @group Stable API
+
     # Renders the stamp named <tt>name</tt> to the page
     # raises <tt>Prawn::Errors::InvalidName</tt> if name.empty?
     # raises <tt>Prawn::Errors::UndefinedObjectName</tt> if no stamp
@@ -42,7 +44,7 @@ module Prawn
     #
     def stamp(name)
       dictionary_name, dictionary = stamp_dictionary(name)
-      add_content "/#{dictionary_name} Do"
+      renderer.add_content "/#{dictionary_name} Do"
       state.page.xobjects.merge!(dictionary_name => dictionary)
     end
 
@@ -80,7 +82,7 @@ module Prawn
 
       state.page.stamp_stream(dictionary, &block)
     end
-    
+
     private
 
     def stamp_dictionary_registry
@@ -121,12 +123,12 @@ module Prawn
                                           :stamp_dictionary      => dictionary }
       dictionary
     end
-    
+
     def freeze_stamp_graphics
       update_colors
       write_line_width
       write_stroke_cap_style
-      write_stroke_join_style     
+      write_stroke_join_style
       write_stroke_dash
     end
 

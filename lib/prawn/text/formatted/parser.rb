@@ -13,6 +13,7 @@ module Prawn
     module Formatted
 
       class Parser
+        # @group Extension API
 
         PARSER_REGEX = begin
           regex_string = "\n|" +
@@ -29,10 +30,10 @@ module Prawn
                          "<em>|</em>|" +
                          "<a[^>]*>|</a>|" +
                          "[^<\n]+"
-          regex = Regexp.new(regex_string, Regexp::MULTILINE)
+          Regexp.new(regex_string, Regexp::MULTILINE)
         end
 
-        def self.to_array(string)
+        def self.format(string, *args)
           tokens = string.gsub(/<br\s*\/?>/, "\n").scan(PARSER_REGEX)
           self.array_from_tokens(tokens)
         end
@@ -125,10 +126,11 @@ module Prawn
           colors = []
           link = nil
           anchor = nil
+          local = nil
           fonts = []
           sizes = []
           character_spacings = []
-          
+
           while token = tokens.shift
             case token
             when "<b>", "<strong>"
@@ -158,6 +160,7 @@ module Prawn
             when "</link>", "</a>"
               link = nil
               anchor = nil
+              local = nil
             when "</color>"
               colors.pop
             when "</font>"
@@ -171,6 +174,9 @@ module Prawn
 
                 matches = /anchor="([^"]*)"/.match(token) || /anchor='([^']*)'/.match(token)
                 anchor = matches[1] unless matches.nil?
+
+                matches = /local="([^"]*)"/.match(token) || /local='([^']*)'/.match(token)
+                local = matches[1] unless matches.nil?
               elsif token =~ /^<color[^>]*>$/
                 matches = /rgb="#?([^"]*)"/.match(token) || /rgb='#?([^']*)'/.match(token)
                 colors << matches[1] if matches
@@ -182,7 +188,7 @@ module Prawn
                 # intend to support rgb="#ffffff" or rgb='#ffffff',
                 # r="255" g="255" b="255" or r='255' g='255' b='255',
                 # and c="100" m="100" y="100" k="100" or
-                # c='100' m='100' y='100' k='100' 
+                # c='100' m='100' y='100' k='100'
                 # color = { :rgb => "#ffffff" }
                 # color = { :r => 255, :g => 255, :b => 255 }
                 # color = { :c => 100, :m => 100, :y => 100, :k => 100 }
@@ -200,6 +206,7 @@ module Prawn
                 array << { :text => string,
                            :styles => styles.dup,
                            :color => colors.last,
+                           :local => local,
                            :link => link,
                            :anchor => anchor,
                            :font => fonts.last,

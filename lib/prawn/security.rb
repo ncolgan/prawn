@@ -7,30 +7,33 @@
 # This is free software. Please see the LICENSE and COPYING files for details.
 
 require 'digest/md5'
-require 'rc4'
-require 'prawn/core/byte_string'
+
+require 'pdf/core/byte_string'
+
+require_relative 'security/arcfour'
 
 module Prawn
   class Document
-    
+
     # Implements PDF encryption (password protection and permissions) as
     # specified in the PDF Reference, version 1.3, section 3.5 "Encryption".
     module Security
-      include Prawn::Core
-      
+
+      # @group Experimental API
+
       # Encrypts the document, to protect confidential data or control
       # modifications to the document. The encryption algorithm used is
       # detailed in the PDF Reference 1.3, section 3.5 "Encryption", and it is
       # implemented by all major PDF readers.
       #
       # +options+ can contain the following:
-      # 
-      # <tt>:user_password</tt>:: Password required to open the document. If 
+      #
+      # <tt>:user_password</tt>:: Password required to open the document. If
       #                           this is omitted or empty, no password will be
       #                           required. The document will still be
       #                           encrypted, but anyone can read it.
       #
-      # <tt>:owner_password</tt>:: Password required to make modifications to 
+      # <tt>:owner_password</tt>:: Password required to make modifications to
       #                            the document or change or override its
       #                            permissions. If this is set to
       #                            <tt>:random</tt>, a random password will be
@@ -52,7 +55,7 @@ module Prawn
       #
       # <tt>:copy_contents</tt>:: Copy text and graphics from document.
       #
-      # <tt>:modify_annotations</tt>:: Add or modify text annotations and 
+      # <tt>:modify_annotations</tt>:: Add or modify text annotations and
       #                                interactive form fields.
       #
       # == Examples
@@ -66,8 +69,8 @@ module Prawn
       # both the user and the owner:
       #
       #   encrypt_document :user_password => 'foo', :owner_password => 'bar'
-      # 
-      # Set no passwords, grant all permissions (This is useful because the 
+      #
+      # Set no passwords, grant all permissions (This is useful because the
       # default in some readers, if no permissions are specified, is "deny"):
       #
       #   encrypt_document
@@ -77,10 +80,10 @@ module Prawn
       # * The encryption used is weak; the key is password-derived and is
       #   limited to 40 bits, due to US export controls in effect at the time
       #   the PDF standard was written.
-      # 
+      #
       # * There is nothing technologically requiring PDF readers to respect the
       #   permissions embedded in a document. Many PDF readers do not.
-      # 
+      #
       # * In short, you have <b>no security at all</b> against a moderately
       #   motivated person. Don't use this for anything super-serious. This is
       #   not a limitation of Prawn, but is rather a built-in limitation of the
@@ -104,7 +107,7 @@ module Prawn
         state.encrypt = true
         state.encryption_key = user_encryption_key
       end
-      
+
       # Encrypts the given string under the given key, also requiring the
       # object ID and generation number of the reference.
       # See Algorithm 3.1.
@@ -116,7 +119,7 @@ module Prawn
 
         # Compute the RC4 key from the extended key and perform the encryption
         rc4_key = Digest::MD5.digest(extended_key)[0, 10]
-        RC4.new(rc4_key).encrypt(str)
+        Arcfour.new(rc4_key).encrypt(str)
       end
 
       private
@@ -126,8 +129,8 @@ module Prawn
         { :Filter => :Standard, # default PDF security handler
           :V      => 1,         # "Algorithm 3.1", PDF reference 1.3
           :R      => 2,         # Revision 2 of the algorithm
-          :O      => ByteString.new(owner_password_hash),
-          :U      => ByteString.new(user_password_hash),
+          :O      => PDF::Core::ByteString.new(owner_password_hash),
+          :U      => PDF::Core::ByteString.new(user_password_hash),
           :P      => permissions_value }
       end
 
@@ -136,7 +139,7 @@ module Prawn
                           :modify_contents    => 4,
                           :copy_contents      => 5,
                           :modify_annotations => 6 }
-      
+
       FullPermissions = 0b1111_1111_1111_1111_1111_1111_1111_1111
 
       def permissions=(perms={})
@@ -162,10 +165,10 @@ module Prawn
         @permissions || FullPermissions
       end
 
-      PasswordPadding = 
+      PasswordPadding =
         "28BF4E5E4E758A4164004E56FFFA01082E2E00B6D0683E802F0CA9FE6453697A".
         scan(/../).map{|x| x.to_i(16)}.pack("c*")
-      
+
       # Pads or truncates a password to 32 bytes as per Alg 3.2.
       def pad_password(password)
         password = password[0, 32]
@@ -186,25 +189,30 @@ module Prawn
       def owner_password_hash
         @owner_password_hash ||= begin
           key = Digest::MD5.digest(pad_password(@owner_password))[0, 5]
-          RC4.new(key).encrypt(pad_password(@user_password))
+          Arcfour.new(key).encrypt(pad_password(@user_password))
         end
       end
 
       # The U (user) value in the encryption dictionary. Algorithm 3.4.
       def user_password_hash
-        RC4.new(user_encryption_key).encrypt(PasswordPadding)
+        Arcfour.new(user_encryption_key).encrypt(PasswordPadding)
       end
 
     end
 
   end
+end
 
-  module Core #:nodoc:
+# @private
+module PDF
+  module Core
     module_function
 
     # Like PdfObject, but returns an encrypted result if required.
     # For direct objects, requires the object identifier and generation number
     # from the indirect object referencing obj.
+    #
+    # @private
     def EncryptedPdfObject(obj, key, id, gen, in_content_stream=false)
       case obj
       when Array
@@ -212,24 +220,22 @@ module Prawn
             EncryptedPdfObject(e, key, id, gen, in_content_stream)
         }.join(' ') << "]"
       when LiteralString
-        # FIXME: encrypted?
-        obj = obj.gsub(/[\\\n\(\)]/) { |m| "\\#{m}" }
+        obj = ByteString.new(Prawn::Document::Security.encrypt_string(obj, key, id, gen)).gsub(/[\\\n\(\)]/) { |m| "\\#{m}" }
         "(#{obj})"
       when Time
-        # FIXME: encrypted?
         obj = obj.strftime("D:%Y%m%d%H%M%S%z").chop.chop + "'00'"
-        obj = obj.gsub(/[\\\n\(\)]/) { |m| "\\#{m}" }
+        obj = ByteString.new(Prawn::Document::Security.encrypt_string(obj, key, id, gen)).gsub(/[\\\n\(\)]/) { |m| "\\#{m}" }
         "(#{obj})"
       when String
         PdfObject(
           ByteString.new(
-            Document::Security.encrypt_string(obj, key, id, gen)),
+            Prawn::Document::Security.encrypt_string(obj, key, id, gen)),
           in_content_stream)
-      when Hash
+      when ::Hash
         output = "<< "
         obj.each do |k,v|
           unless String === k || Symbol === k
-            raise Prawn::Errors::FailedObjectConversion,
+            raise PDF::Core::Errors::FailedObjectConversion,
               "A PDF Dictionary must be keyed by names"
           end
           output << PdfObject(k.to_sym, in_content_stream) << " " <<
@@ -239,23 +245,26 @@ module Prawn
       when NameTree::Value
         PdfObject(obj.name) + " " +
           EncryptedPdfObject(obj.value, key, id, gen, in_content_stream)
-      when Prawn::OutlineRoot, Prawn::OutlineItem
+      when PDF::Core::OutlineRoot, PDF::Core::OutlineItem
         EncryptedPdfObject(obj.to_hash, key, id, gen, in_content_stream)
       else # delegate back to PdfObject
         PdfObject(obj, in_content_stream)
       end
     end
 
+
+    # @private
     class Stream
       def encrypted_object(key, id, gen)
         if filtered_stream
-          "stream\n#{Document::Security.encrypt_string filtered_stream, key, id, gen}\nendstream\n"
+          "stream\n#{Prawn::Document::Security.encrypt_string filtered_stream, key, id, gen}\nendstream\n"
         else
           ''
         end
       end
     end
 
+    # @private
     class Reference
 
       # Returns the object definition for the object this references, keyed from
@@ -265,10 +274,10 @@ module Prawn
 
         output = "#{@identifier} #{gen} obj\n"
         unless @stream.empty?
-          output << Prawn::Core::EncryptedPdfObject(data.merge(@stream.data), key, @identifier, gen) << "\n" <<
+          output << PDF::Core::EncryptedPdfObject(data.merge(@stream.data), key, @identifier, gen) << "\n" <<
             @stream.encrypted_object(key, @identifier, gen)
         else
-          output << Prawn::Core::EncryptedPdfObject(data, key, @identifier, gen) << "\n"
+          output << PDF::Core::EncryptedPdfObject(data, key, @identifier, gen) << "\n"
         end
 
         output << "endobj\n"
@@ -276,6 +285,4 @@ module Prawn
 
     end
   end
-
 end
-

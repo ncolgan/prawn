@@ -41,23 +41,18 @@ describe "#height_of" do
   end
 
   it "should_not raise_error Prawn::Errors::UnknownOption if :final_gap option is provided" do
-    lambda {
-      @pdf.height_of("hai", :width => 300,
-                     :final_gap => true)
-    }.should_not raise_error(Prawn::Errors::UnknownOption)
+    @pdf.height_of("hai", :width => 300, :final_gap => true)
   end
 end
 
 describe "#text" do
   before(:each) { create_pdf }
 
-  it "should not fail when @output is nil when Prawn::Core::Text::LineWrap#finalize_line is called" do
+  it "should not fail when @output is nil when PDF::Core::Text::LineWrap#finalize_line is called" do
     # need a document with margins for these particulars to produce the
     # condition that was throwing the error
     pdf = Prawn::Document.new
-    lambda {
-      pdf.text "transparency " * 150, :size => 18
-    }.should_not raise_error(TypeError)
+    pdf.text "transparency " * 150, :size => 18
   end
 
   it "should allow drawing empty strings to the page" do
@@ -66,7 +61,7 @@ describe "#text" do
     # If anything is rendered to the page, it should be whitespace.
     text.strings.each { |str| str.should =~ /\A\s*\z/ }
   end
-  
+
   it "should ignore call when string is nil" do
     @pdf.text(nil).should be_false
   end
@@ -260,11 +255,9 @@ describe "#text" do
   it "should raise_error an exception when an unknown font is used" do
     lambda { @pdf.font "Pao bu" }.should raise_error(Prawn::Errors::UnknownFont)
   end
-  
+
   it "should_not raise_error an exception when providing Pathname instance as font" do
-    lambda {
-      @pdf.font Pathname.new("#{Prawn::DATADIR}/fonts/comicsans.ttf")
-    }.should_not raise_error(Prawn::Errors::UnknownFont)
+    @pdf.font Pathname.new("#{Prawn::DATADIR}/fonts/DejaVuSans.ttf")
   end
 
   it "should correctly render a utf-8 string when using a built-in font" do
@@ -282,6 +275,16 @@ describe "#text" do
     @pdf.text str
 
     # grab the text from the rendered PDF and ensure it matches
+    text = PDF::Inspector::Text.analyze(@pdf.render)
+    text.strings.first.should == str
+  end
+
+  it "subsets mixed low-ASCII and non-ASCII characters when they can be " +
+     "subsetted together" do
+    str = "It’s super effective!"
+    @pdf.font "#{Prawn::DATADIR}/fonts/DejaVuSans.ttf"
+    @pdf.text str
+
     text = PDF::Inspector::Text.analyze(@pdf.render)
     text.strings.first.should == str
   end
@@ -310,33 +313,19 @@ describe "#text" do
     pages[1][:strings].should == [str]
   end
 
-  if "spec".respond_to?(:encode!)
-    # Handle non utf-8 string encodings in a sane way on M17N aware VMs
-    it "should raise_error an exception when a utf-8 incompatible string is rendered" do
-      str = "Blah \xDD"
-      str.force_encoding("ASCII-8BIT")
-      lambda { @pdf.text str }.should raise_error(
-        Prawn::Errors::IncompatibleStringEncoding)
-    end
-    it "should_not raise_error an exception when a shift-jis string is rendered" do
-      datafile = "#{Prawn::DATADIR}/shift_jis_text.txt"
-      sjis_str = File.open(datafile, "r:shift_jis") { |f| f.gets }
-      @pdf.font("#{Prawn::DATADIR}/fonts/gkai00mp.ttf")
-      lambda { @pdf.text sjis_str }.should_not raise_error(
-        Prawn::Errors::IncompatibleStringEncoding)
-    end
-  else
-    # Handle non utf-8 string encodings in a sane way on non-M17N aware VMs
-    it "should raise_error an exception when a corrupt utf-8 string is rendered" do
-      str = "Blah \xDD"
-      lambda { @pdf.text str }.should raise_error(
-        Prawn::Errors::IncompatibleStringEncoding)
-    end
-    it "should raise_error an exception when a shift-jis string is rendered" do
-      sjis_str = File.read("#{Prawn::DATADIR}/shift_jis_text.txt")
-      lambda { @pdf.text sjis_str }.should raise_error(
-        Prawn::Errors::IncompatibleStringEncoding)
-    end
+  it "should raise_error an exception when a utf-8 incompatible string is rendered" do
+    str = "Blah \xDD"
+    lambda { @pdf.text str }.should raise_error(
+      Prawn::Errors::IncompatibleStringEncoding)
+  end
+
+  it "should_not raise_error an exception when a shift-jis string is rendered" do
+    datafile = "#{Prawn::DATADIR}/shift_jis_text.txt"
+    sjis_str = File.open(datafile, "r:shift_jis") { |f| f.gets }
+    @pdf.font("#{Prawn::DATADIR}/fonts/gkai00mp.ttf")
+
+    # Expect that the call to text will not raise an encoding error
+    @pdf.text(sjis_str)
   end
 
   it "should call move_past_bottom when printing more text than can fit" +
@@ -361,6 +350,57 @@ describe "#text" do
       text.strings[3].should == ("hello " * 19).strip
       text.strings[4].should == ("hello " * 21).strip
     end
+
+
+    it "should indent from right side when using :rtl direction" do
+      para1 = "The rain in spain falls mainly on the plains " * 3
+      para2 = "The rain in spain falls mainly on the plains " * 3
+
+      @pdf.text(para1 + "\n" + para2, :indent_paragraphs => 60, :direction => :rtl)
+
+      text = PDF::Inspector::Text.analyze(@pdf.render)
+
+      lines = text.strings
+      x_positions = text.positions.map { |e| e[0] }
+
+      # NOTE: The code below reflects Prawn's current kerning behavior for RTL
+      # text, which isn't necessarily correct. If we change that behavior,
+      # this test will need to be updated.
+
+      x_positions[0].should(
+        be_within(0.001).of(@pdf.bounds.absolute_right - 60 -
+                            @pdf.width_of(lines[0].reverse, :kerning => true)))
+
+      x_positions[1].should(
+        be_within(0.001).of(@pdf.bounds.absolute_right -
+                            @pdf.width_of(lines[1].reverse, :kerning => true)))
+
+      x_positions[2].should(
+        be_within(0.001).of(@pdf.bounds.absolute_right - 60 -
+                            @pdf.width_of(lines[2].reverse, :kerning => true)))
+
+      x_positions[3].should(
+        be_within(0.001).of(@pdf.bounds.absolute_right -
+                            @pdf.width_of(lines[3].reverse, :kerning => true)))
+    end
+
+    it "should indent from right side when using :ltr direction" do
+      para1 = "The rain in spain falls mainly on the plains " * 3
+      para2 = "The rain in spain falls mainly on the plains " * 3
+
+      @pdf.text(para1 + "\n" + para2, :indent_paragraphs => 60, :direction => :ltr)
+
+      text = PDF::Inspector::Text.analyze(@pdf.render)
+
+      x_positions = text.positions.map { |e| e[0] }
+
+      x_positions[0].should == 60
+      x_positions[1].should == 0
+
+      x_positions[2].should == 60
+      x_positions[3].should == 0
+    end
+
     describe "when wrap to new page, and first line of new page" +
              " is not the start of a new paragraph, that line should" +
              " not be indented" do
@@ -418,4 +458,49 @@ describe "#text" do
       @pdf.text "VAT", :kerning => false
     end
   end
+
+  describe "#shrink_to_fit with special utf-8 text" do
+    it "Should not throw an exception",
+        :unresolved, :issue => 603 do
+      pages = 0
+      doc = Prawn::Document.new(page_size: 'A4', margin: [2, 2, 2, 2]) do |pdf|
+        add_unicode_fonts(pdf)
+        pdf.bounding_box([1, 1], :width => 90, :height => 50) do
+          broken_text = " Sample Text\nSAMPLE SAMPLE SAMPLEoddělení ZMĚN\nSAMPLE"
+          pdf.text broken_text, :overflow => :shrink_to_fit
+        end
+      end
+    end
+  end
+
+
+  def add_unicode_fonts(pdf)
+    dejavu = "#{::Prawn::BASEDIR}/data/fonts/DejaVuSans.ttf"
+    pdf.font_families.update("dejavu" => {
+      :normal      => dejavu,
+      :italic      => dejavu,
+      :bold        => dejavu,
+      :bold_italic => dejavu
+    })
+    pdf.fallback_fonts = ["dejavu"]
+  end
+
+  describe "fallback_fonts" do
+    it "should preserve font style" do
+      create_pdf
+
+      @pdf.fallback_fonts ["Helvetica"]
+      @pdf.font "Times-Roman", :style => :italic do
+        @pdf.text "hello"
+      end
+
+      text = PDF::Inspector::Text.analyze(@pdf.render)
+      fonts_used = text.font_settings.map { |e| e[:name] }
+
+      fonts_used.length.should == 1
+      fonts_used[0].should == :"Times-Italic"
+      text.strings[0].should == "hello"
+    end
+  end
+
 end

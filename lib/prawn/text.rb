@@ -5,15 +5,18 @@
 # Copyright May 2008, Gregory Brown. All Rights Reserved.
 #
 # This is free software. Please see the LICENSE and COPYING files for details.
-require "prawn/core/text"
-require "prawn/text/formatted"
-require "prawn/text/box"
+
 require "zlib"
+
+require "pdf/core/text"
+
+require_relative "text/formatted"
+require_relative "text/box"
 
 module Prawn
   module Text
 
-    include Prawn::Core::Text
+    include PDF::Core::Text
     include Prawn::Text::Formatted
 
     # No-Break Space
@@ -23,11 +26,13 @@ module Prawn
     # Soft Hyphen (invisible, except when causing a line break)
     Prawn::Text::SHY = "­"
 
+    # @group Stable API
+
     # If you want text to flow onto a new page or between columns, this is the
     # method to use. If, instead, if you want to place bounded text outside of
     # the flow of a document (for captions, labels, charts, etc.), use Text::Box
     # or its convenience method text_box.
-    # 
+    #
     # Draws text on the page. Prawn attempts to wrap the text to fit within your
     # current bounding box (or margin_box if no bounding box is being used).
     # Text will flow onto the next page when it reaches the bottom of the
@@ -49,28 +54,29 @@ module Prawn
     # entire document, set default_kerning = false for that document
     #
     # === Text Positioning Details
-    # 
+    #
     # The text is positioned at font.ascender below the baseline,
     # making it easy to use this method within bounding boxes and spans.
     #
     # == Encoding
     #
     # Note that strings passed to this function should be encoded as UTF-8.
-    # If you get unexpected characters appearing in your rendered document, 
+    # If you get unexpected characters appearing in your rendered document,
     # check this.
     #
     # If the current font is a built-in one, although the string must be
     # encoded as UTF-8, only characters that are available in WinAnsi
     # are allowed.
     #
-    # If an empty box is rendered to your PDF instead of the character you 
+    # If an empty box is rendered to your PDF instead of the character you
     # wanted it usually means the current font doesn't include that character.
     #
     # == Options (default values marked in [])
     #
     # <tt>:inline_format</tt>::
     #      <tt>boolean</tt>. If true, then the string parameter is interpreted
-    #      as a HTML-esque string that recognizes the following tags:
+    #      as a HTML-esque string that recognizes the following tags
+    #      (assuming the default text formatter is used):
     #      <tt>\<b></b></tt>:: bold
     #      <tt>\<i></i></tt>:: italic
     #      <tt>\<u></u></tt>:: underline
@@ -94,11 +100,6 @@ module Prawn
     #      <tt>\<link></link></tt>::
     #          with the following attributes
     #            <tt>href="http://example.com"</tt>:: an external link
-    #            <tt>anchor="ToC"</tt>::
-    #                where the value of the anchor attribute is the name of a
-    #                destination that has already been or will be registered
-    #                using Prawn::Core::Destinations#add_dest. A clickable link
-    #                will be created to that destination. 
     #          Note that you must explicitly underline and color using the
     #          appropriate tags if you which to draw attention to the link
     #
@@ -115,7 +116,7 @@ module Prawn
     #                   the current font familly. [current style]
     # <tt>:indent_paragraphs</tt>:: <tt>number</tt>. The amount to indent the
     #                               first line of each paragraph. Omit this
-    #                               option if you do not want indenting
+    #                               option if you do not want indenting.
     # <tt>:direction</tt>::
     #     <tt>:ltr</tt>, <tt>:rtl</tt>, Direction of the text (left-to-right
     #     or right-to-left) [value of document.text_direction]
@@ -143,7 +144,7 @@ module Prawn
     #                  text should render with the fill color, stroke color or
     #                  both. See the comments to text_rendering_mode() to see
     #                  a list of valid options. [0]
-    #                        
+    #
     # == Exceptions
     #
     # Raises <tt>ArgumentError</tt> if <tt>:at</tt> option included
@@ -156,16 +157,16 @@ module Prawn
       # we modify the options. don't change the user's hash
       options = options.dup
 
-      if options[:inline_format]
+      if p = options[:inline_format]
+        p = [] unless p.is_a?(Array)
         options.delete(:inline_format)
-        array = Text::Formatted::Parser.to_array(string)
+        array = self.text_formatter.format(string, *p)
       else
         array = [{ :text => string }]
       end
 
       formatted_text(array, options)
     end
-
 
     # Draws formatted text to the page.
     # Formatted text is comprised of an array of hashes, where each hash defines
@@ -191,24 +192,20 @@ module Prawn
       options = inspect_options_for_text(options.dup)
 
       if color = options.delete(:color)
-        array = array.map do |fragment| 
+        array = array.map do |fragment|
           fragment[:color] ? fragment : fragment.merge(:color => color)
         end
       end
 
       if @indent_paragraphs
-        Text::Formatted::Parser.array_paragraphs(array).each do |paragraph|
-          options[:skip_encoding] = false
+        self.text_formatter.array_paragraphs(array).each do |paragraph|
           remaining_text = draw_indented_formatted_line(paragraph, options)
-          options[:skip_encoding] = true
 
           if @no_text_printed
             # unless this paragraph was an empty line
             unless @all_text_printed
               @bounding_box.move_past_bottom
-              options[:skip_encoding] = false
               remaining_text = draw_indented_formatted_line(paragraph, options)
-              options[:skip_encoding] = true
             end
           end
 
@@ -217,14 +214,13 @@ module Prawn
         end
       else
         remaining_text = fill_formatted_text_box(array, options)
-        options[:skip_encoding] = true
         draw_remaining_formatted_text_on_new_pages(remaining_text, options)
       end
     end
 
     # Draws text on the page, beginning at the point specified by the :at option
     # the string is assumed to be pre-formatted to properly fit the page.
-    # 
+    #
     #   pdf.draw_text "Hello World", :at => [100,100]
     #   pdf.draw_text "Goodbye World", :at => [50,50], :size => 16
     #
@@ -246,14 +242,14 @@ module Prawn
     # == Encoding
     #
     # Note that strings passed to this function should be encoded as UTF-8.
-    # If you get unexpected characters appearing in your rendered document, 
+    # If you get unexpected characters appearing in your rendered document,
     # check this.
     #
     # If the current font is a built-in one, although the string must be
     # encoded as UTF-8, only characters that are available in WinAnsi
     # are allowed.
     #
-    # If an empty box is rendered to your PDF instead of the character you 
+    # If an empty box is rendered to your PDF instead of the character you
     # wanted it usually means the current font doesn't include that character.
     #
     # == Options (default values marked in [])
@@ -282,9 +278,27 @@ module Prawn
       text = text.to_s.dup
       save_font do
         process_text_options(options)
-        font.normalize_encoding!(text) unless @skip_encoding
+        font.normalize_encoding!(text)
         font_size(options[:size]) { draw_text!(text, options) }
       end
+    end
+
+    # Low level text placement method. All font and size alterations
+    # should already be set
+    #
+    def draw_text!(text, options)
+      unless font.unicode? || font.class.hide_m17n_warning || text.ascii_only?
+        warn "PDF's built-in fonts have very limited support for "+
+             "internationalized text.\nIf you need full UTF-8 support, "+
+             "consider using a TTF font instead.\n\nTo disable this "+
+             "warning, add the following line to your code:\n"+
+             "Prawn::Font::AFM.hide_m17n_warning = true\n"
+
+        font.class.hide_m17n_warning = true
+      end
+
+      x,y = map_to_absolute(options[:at])
+      add_text_content(text,x,y,options)
     end
 
     # Gets height of text in PDF points.
@@ -326,7 +340,7 @@ module Prawn
       box = Text::Formatted::Box.new(array,
                           options.merge(:height   => 100000000,
                                         :document => self))
-      printed = box.render(:dry_run => true)
+      box.render(:dry_run => true)
 
       height = box.height
       height += box.line_gap + box.leading if @final_gap
@@ -345,7 +359,10 @@ module Prawn
     end
 
     def draw_indented_formatted_line(string, options)
-      indent(@indent_paragraphs) do
+      gap = options.fetch(:direction, :ltr) == :ltr ?
+              [@indent_paragraphs, 0] : [0, @indent_paragraphs]
+
+      indent(*gap) do
         fill_formatted_text_box(string, options.dup.merge(:single_line => true))
       end
     end
@@ -382,7 +399,7 @@ module Prawn
       if options[:kerning].nil? then
         options[:kerning] = default_kerning?
       end
-      valid_options = Prawn::Core::Text::VALID_OPTIONS + [:at, :rotate]
+      valid_options = PDF::Core::Text::VALID_OPTIONS + [:at, :rotate]
       Prawn.verify_options(valid_options, options)
       options
     end

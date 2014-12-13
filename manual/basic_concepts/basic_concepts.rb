@@ -2,20 +2,21 @@
 #
 # Examples for Prawn basic concepts.
 #
-require File.expand_path(File.join(File.dirname(__FILE__),
-                                   %w[.. example_helper]))
 
-Prawn::Example.generate("basic_concepts.pdf", :page_size => "FOLIO") do
-  
+require_relative "../example_helper"
+
+Prawn::ManualBuilder::Example.generate("basic_concepts.pdf", :page_size => "FOLIO") do
+
   package "basic_concepts" do |p|
-    
+
     p.example "creation", :eval_source => false, :full_source => true
     p.example "origin"
     p.example "cursor"
     p.example "other_cursor_helpers"
     p.example "adding_pages"
     p.example "measurement"
-    
+    p.example "view", :eval_source => false, :full_source => true
+
     p.intro do
       prose("This chapter covers the minimum amount of functionality you'll need to start using Prawn.
 
@@ -27,7 +28,8 @@ Prawn::Example.generate("basic_concepts.pdf", :page_size => "FOLIO") do
             "Where the origin for the document coordinates is. What are Bounding Boxes and how they interact with the origin",
             "How the cursor behaves",
             "How to start new pages",
-            "What the base unit for measurement and coordinates is and how to use other convenient measures"
+            "What the base unit for measurement and coordinates is and how to use other convenient measures",
+            "How to build custom view objects that use Prawn's DSL"
           )
     end
   end

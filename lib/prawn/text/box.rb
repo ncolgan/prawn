@@ -7,8 +7,11 @@
 # This is free software. Please see the LICENSE and COPYING files for details.
 #
 
+require_relative "formatted/box"
+
 module Prawn
   module Text
+    # @group Stable API
 
     # Draws the requested text into a box. When the text overflows
     # the rectangle, you shrink to fit, or truncate the text. Text
@@ -17,14 +20,14 @@ module Prawn
     # == Encoding
     #
     # Note that strings passed to this function should be encoded as UTF-8.
-    # If you get unexpected characters appearing in your rendered document, 
+    # If you get unexpected characters appearing in your rendered document,
     # check this.
     #
     # If the current font is a built-in one, although the string must be
     # encoded as UTF-8, only characters that are available in WinAnsi
     # are allowed.
     #
-    # If an empty box is rendered to your PDF instead of the character you 
+    # If an empty box is rendered to your PDF instead of the character you
     # wanted it usually means the current font doesn't include that character.
     #
     # == Options (default values marked in [])
@@ -37,6 +40,8 @@ module Prawn
     # <tt>:character_spacing</tt>:: <tt>number</tt>. The amount of space to add
     #                               to or remove from the default character
     #                               spacing. [0]
+    # <tt>:disable_wrap_by_char</tt>:: <tt>boolean</tt> Whether
+    # or not to prevent mid-word breaks when text does not fit in box. [false]
     # <tt>:mode</tt>:: <tt>symbol</tt>. The text rendering mode. See
     #                  documentation for Prawn::Document#text_rendering_mode
     #                  for a list of valid options. [:fill]
@@ -67,7 +72,6 @@ module Prawn
     # <tt>:valign</tt>::
     #     <tt>:top</tt>, <tt>:center</tt>, or <tt>:bottom</tt>. Vertical
     #     alignment within the bounding box [:top]
-    #                   
     # <tt>:rotate</tt>::
     #     <tt>number</tt>. The angle to rotate the text
     # <tt>:rotate_around</tt>::
@@ -79,8 +83,6 @@ module Prawn
     #     document.default_leading]
     # <tt>:single_line</tt>::
     #     <tt>boolean</tt>. If true, then only the first line will be drawn [false]
-    # <tt>:skip_encoding</tt>::
-    #     <tt>boolean</tt> [false]
     # <tt>:overflow</tt>::
     #     <tt>:truncate</tt>, <tt>:shrink_to_fit</tt>, or <tt>:expand</tt>
     #     This controls the behavior when the amount of text
@@ -94,22 +96,18 @@ module Prawn
     #
     # Returns any text that did not print under the current settings.
     #
-    # NOTE: if an AFM font is used, then the returned text is encoded in
-    # WinAnsi. Subsequent calls to text_box that pass this returned text back
-    # into text box must include a :skip_encoding => true option. This is
-    # unnecessary when using TTF fonts because those operate on UTF-8 encoding.
-    #
     # == Exceptions
     #
-    # Raises <tt>Prawn::Errrors::CannotFit</tt> if not wide enough to print
+    # Raises <tt>Prawn::Errors::CannotFit</tt> if not wide enough to print
     # any text
     #
     def text_box(string, options={})
       options = options.dup
       options[:document] = self
 
-      box = if options.delete(:inline_format)
-              array = Text::Formatted::Parser.to_array(string)
+      box = if p = options.delete(:inline_format)
+              p = [] unless p.is_a?(Array)
+              array = self.text_formatter.format(string, *p)
               Text::Formatted::Box.new(array, options)
             else
               Text::Box.new(string, options)
@@ -118,8 +116,10 @@ module Prawn
       box.render
     end
 
+    # @group Experimental API
+
     # Generally, one would use the Prawn::Text#text_box convenience
-    # method. However, using Text::Box.new in conjunction with 
+    # method. However, using Text::Box.new in conjunction with
     # #render(:dry_run=> true) enables one to do look-ahead calculations prior
     # to placing text on the page, or to determine how much vertical space was
     # consumed by the printed text

@@ -116,7 +116,7 @@ describe "Text::Box" do
   end
   it "should default to document-wide leading if no" +
     "leading option is provided" do
-    
+
   end
 end
 
@@ -278,14 +278,15 @@ describe "Text::Box#render(:dry_run => true)" do
     text = PDF::Inspector::Text.analyze(@pdf.render)
     text.strings.should be_empty
   end
+
   it "subsequent calls to render should_not raise_error an ArgumentError exception" do
     create_pdf
     @text = "™©"
     @options = { :document => @pdf }
     text_box = Prawn::Text::Box.new(@text, @options)
     text_box.render(:dry_run => true)
-    lambda { text_box.render }.should_not raise_error(
-      Prawn::Errors::IncompatibleStringEncoding)
+
+    text_box.render
   end
 end
 
@@ -548,7 +549,7 @@ describe "Text::Box with text than can fit in the box" do
       :document => @pdf
     }
   end
-  
+
   it "printed text should match requested text, except that preceding and " +
     "trailing white space will be stripped from each line, and newlines may " +
     "be inserted" do
@@ -556,7 +557,7 @@ describe "Text::Box with text than can fit in the box" do
     text_box.render
     text_box.text.gsub("\n", " ").should == @text.strip
   end
-  
+
   it "render should return an empty string because no text remains unprinted" do
     text_box = Prawn::Text::Box.new(@text, @options)
     text_box.render.should == ""
@@ -582,7 +583,7 @@ describe "Text::Box with text that fits exactly in the box" do
       :document => @pdf
     }
   end
-  
+
   it "should have the expected height" do
     expected_height = @options.delete(:height)
     text_box = Prawn::Text::Box.new(@text, @options)
@@ -639,7 +640,7 @@ end
 
 describe "Text::Box printing UTF-8 string with higher bit characters" do
   before(:each) do
-    create_pdf    
+    create_pdf
     @text = "©"
     # not enough height to print any text, so we can directly compare against
     # the input string
@@ -648,53 +649,34 @@ describe "Text::Box printing UTF-8 string with higher bit characters" do
       :height => bounding_height,
       :document => @pdf
     }
-    file = "#{Prawn::DATADIR}/fonts/Action Man.dfont"
-    @pdf.font_families["Action Man"] = {
-      :normal      => { :file => file, :font => "ActionMan" },
-      :italic      => { :file => file, :font => "ActionMan-Italic" },
-      :bold        => { :file => file, :font => "ActionMan-Bold" },
-      :bold_italic => { :file => file, :font => "ActionMan-BoldItalic" }
+    file = "#{Prawn::DATADIR}/fonts/Panic+Sans.dfont"
+    @pdf.font_families["Panic Sans"] = {
+      :normal      => { :file => file, :font => "PanicSans" },
+      :italic      => { :file => file, :font => "PanicSans-Italic" },
+      :bold        => { :file => file, :font => "PanicSans-Bold" },
+      :bold_italic => { :file => file, :font => "PanicSans-BoldItalic" }
     }
     @text_box = Prawn::Text::Box.new(@text, options)
   end
   describe "when using a TTF font" do
     it "unprinted text should be in UTF-8 encoding" do
-      @pdf.font("Action Man")
+      @pdf.font("Panic Sans")
       remaining_text = @text_box.render
       remaining_text.should == @text
-    end
-    it "subsequent calls to Text::Box need not include the" +
-       " :skip_encoding => true option" do
-      @pdf.font("Action Man")
-      remaining_text = @text_box.render
-      lambda {
-        @pdf.text_box(remaining_text, :document => @pdf)
-      }.should_not raise_error(Prawn::Errors::IncompatibleStringEncoding)
     end
   end
 
   describe "when using an AFM font" do
-    it "unprinted text should be in WinAnsi encoding" do
+    it "unprinted text should be in UTF-8 encoding" do
       remaining_text = @text_box.render
-      remaining_text.should == @pdf.font.normalize_encoding(@text)
-    end
-    it "subsequent calls to Text::Box must include the" +
-       " :skip_encoding => true option" do
-      remaining_text = @text_box.render
-      lambda {
-        @pdf.text_box(remaining_text, :document => @pdf)
-      }.should raise_error(Prawn::Errors::IncompatibleStringEncoding)
-      lambda {
-        @pdf.text_box(remaining_text, :skip_encoding => true,
-                                      :document => @pdf)
-      }.should_not raise_error(Prawn::Errors::IncompatibleStringEncoding)
+      remaining_text.should == @text
     end
   end
 end
 
 describe "Text::Box with more text than can fit in the box" do
   before(:each) do
-    create_pdf    
+    create_pdf
     @text = "Oh hai text rect. " * 30
     @bounding_height = 162.0
     @options = {
@@ -703,7 +685,7 @@ describe "Text::Box with more text than can fit in the box" do
       :document => @pdf
     }
   end
-  
+
   context "truncated overflow" do
     before(:each) do
       @options[:overflow] = :truncate
@@ -741,7 +723,7 @@ describe "Text::Box with more text than can fit in the box" do
       end
     end
   end
-  
+
   context "truncated with text and size taken from the manual" do
     it "should return the right text" do
       @text = "This is the beginning of the text. It will be cut somewhere and " +
@@ -840,8 +822,8 @@ describe "Text::Box with a solid block of Chinese characters" do
 end
 
 
-describe "drawing bounding boxes" do    
-  before(:each) { create_pdf }   
+describe "drawing bounding boxes" do
+  before(:each) { create_pdf }
 
   it "should restore the margin box when bounding box exits" do
     margin_box = @pdf.bounds
@@ -876,7 +858,7 @@ describe "Text::Box#render with :character_spacing option" do
     text_box.text.should == "hello\nworld"
   end
 end
-  
+
 describe "Text::Box wrapping" do
   before(:each) do
     create_pdf
@@ -991,7 +973,7 @@ describe "Text::Box wrapping" do
 
     expected = "©" * 25 + "\n" + "©" * 5
     @pdf.font.normalize_encoding!(expected)
-    expected = expected.force_encoding("utf-8") if expected.respond_to?(:force_encoding)
+    expected = expected.force_encoding(Encoding::UTF_8)
     text_box.text.should == expected
   end
 
@@ -1008,7 +990,35 @@ describe "Text::Box wrapping" do
     text_box.render
     results_without_accent = text_box.text
 
-    results_with_accent.first_line.length.should == results_without_accent.first_line.length
+    first_line(results_with_accent).length.should == first_line(results_without_accent).length
+  end
+
+  it "should allow you to disable wrapping by char" do
+    text = "You_cannot_wrap_this_text_at_all_because_we_are_disabling_wrapping_by_char_and_there_are_no_word_breaks"
+
+    @pdf.font "Courier"
+    text_box = Prawn::Text::Box.new(text,
+                                    :width => 180,
+                                    :overflow => :shrink_to_fit,
+                                    :disable_wrap_by_char => true,
+                                    :document => @pdf)
+    expect { text_box.render }.to raise_error(Prawn::Errors::CannotFit)
+  end
+
+  it "should retain full words with :shrink_to_fit if char wrapping is disabled" do
+    text = "Wrapped_words"
+    expect = "Wrapped_words"
+
+    @pdf.font "Courier"
+    text_box = Prawn::Text::Box.new(text,
+                                    :width => 50,
+                                    :height => 50,
+                                    :size => 50,
+                                    :overflow => :shrink_to_fit,
+                                    :disable_wrap_by_char => true,
+                                    :document => @pdf)
+    text_box.render
+    text_box.text.should == expect
   end
 end
 
@@ -1026,4 +1036,8 @@ end
 
 def reduce_precision(float)
   ("%.5f" % float).to_f
+end
+
+def first_line(str)
+  str.each_line { |line| return line }
 end

@@ -1,5 +1,5 @@
 # encoding: utf-8
-# 
+#
 # Prawn can be used with right-to-left text. The direction can be set
 # document-wide, on particular text, or on a text-box. Setting the direction to
 # <code>:rtl</code> automatically changes the default alignment to
@@ -9,11 +9,15 @@
 # that two fragments going against the main direction cannot be placed next to
 # each other without appearing in the wrong order.
 #
+# Writing bidirectional text that combines both left-to-right and right-to-left
+# languages is easy using the <code>bidi</code> Ruby Gem and its
+# <code>render_visual</code> function. See https://github.com/elad/ruby-bidi for
+# instructions and an example using Prawn.
 require File.expand_path(File.join(File.dirname(__FILE__),
                                    %w[.. example_helper]))
 
 filename = File.basename(__FILE__).gsub('.rb', '.pdf')
-Prawn::Example.generate(filename) do
+Prawn::ManualBuilder::Example.generate(filename) do
   # set the direction document-wide
   self.text_direction = :rtl
 

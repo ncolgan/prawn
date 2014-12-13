@@ -1,3 +1,5 @@
+# encoding: utf-8
+
 require File.join(File.expand_path(File.dirname(__FILE__)), "spec_helper")
 
 describe "Repeaters" do
@@ -150,7 +152,7 @@ describe "Repeaters" do
         text.strings.include?("cap_style: round").should == false
         text.strings.include?("cap_style: butt").should == true
       end
-      
+
     end
 
   end

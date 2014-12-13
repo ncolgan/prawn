@@ -2,9 +2,9 @@
 #
 # Prawn comes with support for most of the common page sizes so you'll only need
 # to provide specific values if your intended format is not supported. To see a
-# list with all supported sizes take a look at: https://github.com/prawnpdf/prawn/blob/master/lib/prawn/document/page_geometry.rb
+# list with all supported sizes take a look at PDF::Core::PageGeometry
 #
-# To define the size use <code>:page_size</code> when creating new documents
+# # To define the size use <code>:page_size</code> when creating new documents
 # and <code>:size</code> when starting new pages. The default page size for new
 # documents is LETTER (612.00 x 792.00).
 #
@@ -22,12 +22,12 @@ Prawn::Document.generate("page_size.pdf",
   text "EXECUTIVE landscape page."
 
   custom_size = [275, 326]
-  
+
   ["A4", "TABLOID", "B7", custom_size ].each do |size|
-    
+
     start_new_page(:size => size, :layout => :portrait)
     text "#{size} portrait page."
-    
+
     start_new_page(:size => size, :layout => :landscape)
     text "#{size} landscape page."
   end

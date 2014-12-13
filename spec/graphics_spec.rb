@@ -121,7 +121,7 @@ describe "When drawing a curve" do
     curve = PDF::Inspector::Graphics::Curve.analyze(@pdf.render)
     curve.coords.should == [100.0, 100.0, 20.0, 90.0, 90.0, 75.0, 50.0, 50.0]
   end
-  
+
 
 end
 
@@ -141,19 +141,21 @@ describe "When drawing a rounded rectangle" do
     line_points.zip(curves).flatten.each_slice(2) {|p| @all_coords << p }
     @all_coords.unshift @original_point
   end
-  
+
   it "should draw a rectangle by connecting lines with rounded bezier curves" do
-    @all_coords.should == [[60.0, 550.0],[90.0, 550.0], [95.523, 550.0], [100.0, 545.523], [100.0, 540.0], 
-                           [100.0, 460.0], [100.0, 454.477], [95.523, 450.0], [90.0, 450.0], 
-                           [60.0, 450.0], [54.477, 450.0], [50.0, 454.477], [50.0, 460.0], 
-                           [50.0, 540.0], [50.0, 545.523], [54.477, 550.0], [60.0, 550.0]]
+    @all_coords.should == [[60.0, 550.0],[90.0, 550.0], [95.5228, 550.0],
+                           [100.0, 545.5228], [100.0, 540.0], [100.0, 460.0],
+                           [100.0, 454.4772], [95.5228, 450.0], [90.0, 450.0],
+                           [60.0, 450.0], [54.4772, 450.0], [50.0, 454.4772],
+                           [50.0, 460.0], [50.0, 540.0], [50.0, 545.5228],
+                           [54.4772, 550.0], [60.0, 550.0]]
   end
-  
+
   it "should start and end with the same point" do
     @original_point.should == @all_coords.last
   end
-     
-  
+
+
 end
 
 describe "When drawing an ellipse" do
@@ -162,27 +164,27 @@ describe "When drawing an ellipse" do
     @pdf.ellipse [100,100], 25, 50
     @curve = PDF::Inspector::Graphics::Curve.analyze(@pdf.render)
   end
-  
+
   it "should use a Bézier approximation" do
-    @curve.coords.should == 
+    @curve.coords.should ==
       [125.0, 100.0,
 
-       125.0, 127.614,
-       113.807, 150,
+       125.0, 127.6142,
+       113.8071, 150,
        100.0, 150.0,
-       
-       86.193, 150.0,
-       75.0, 127.614,
+
+       86.1929, 150.0,
+       75.0, 127.6142,
        75.0, 100.0,
-       
-       75.0, 72.386,
-       86.193, 50.0,
+
+       75.0, 72.3858,
+       86.1929, 50.0,
        100.0, 50.0,
-       
-       113.807, 50.0,
-       125.0, 72.386,
+
+       113.8071, 50.0,
+       125.0, 72.3858,
        125.0, 100.0,
-       
+
        100.0, 100.0]
   end
 
@@ -210,22 +212,22 @@ describe "When filling" do
   before(:each) { create_pdf }
 
   it "should default to the f operator (nonzero winding number rule)" do
-    @pdf.expects(:add_content).with("f")
+    @pdf.renderer.expects(:add_content).with("f")
     @pdf.fill
   end
 
   it "should use f* for :fill_rule => :even_odd" do
-    @pdf.expects(:add_content).with("f*")
+    @pdf.renderer.expects(:add_content).with("f*")
     @pdf.fill(:fill_rule => :even_odd)
   end
 
   it "should use b by default for fill_and_stroke (nonzero winding number)" do
-    @pdf.expects(:add_content).with("b")
+    @pdf.renderer.expects(:add_content).with("b")
     @pdf.fill_and_stroke
   end
 
   it "should use b* for fill_and_stroke(:fill_rule => :even_odd)" do
-    @pdf.expects(:add_content).with("b*")
+    @pdf.renderer.expects(:add_content).with("b*")
     @pdf.fill_and_stroke(:fill_rule => :even_odd)
   end
 end
@@ -268,7 +270,7 @@ describe "When setting colors" do
     colors.fill_color.should   == [0.8,1.0,0.0]
     colors.stroke_color.should == [1.0,0.0,0.8]
   end
-  
+
   it "should set the color space when setting colors on new pages to please fussy readers" do
     @pdf.stroke_color "000000"
     @pdf.stroke { @pdf.rectangle([10, 10], 10, 10) }
@@ -381,80 +383,92 @@ end
 
 describe "When using graphics states" do
   before(:each) { create_pdf }
-  
+
   it "should add the right content on save_graphics_state" do
-    @pdf.expects(:add_content).with('q')
-    
+    @pdf.renderer.expects(:add_content).with('q')
+
     @pdf.save_graphics_state
   end
-  
+
   it "should add the right content on restore_graphics_state" do
-    @pdf.expects(:add_content).with('Q')
-    
+    @pdf.renderer.expects(:add_content).with('Q')
+
     @pdf.restore_graphics_state
   end
-  
+
   it "should save and restore when save_graphics_state is used with a block" do
     state = sequence "state"
-    @pdf.expects(:add_content).with('q').in_sequence(state)
+    @pdf.renderer.expects(:add_content).with('q').in_sequence(state)
     @pdf.expects(:foo).in_sequence(state)
-    @pdf.expects(:add_content).with('Q').in_sequence(state)
-    
+    @pdf.renderer.expects(:add_content).with('Q').in_sequence(state)
+
     @pdf.save_graphics_state do
       @pdf.foo
     end
   end
-  
+
   it "should add the previous color space when restoring to a graphic state with different color space" do
     @pdf.stroke_color '000000'
     @pdf.save_graphics_state
     @pdf.stroke_color 0, 0, 0, 0
-    @pdf.restore_graphics_state 
+    @pdf.restore_graphics_state
     @pdf.stroke_color 0, 0, 100, 0
     @pdf.graphic_state.color_space.should == {:stroke=>:DeviceCMYK}
     colors = PDF::Inspector::Graphics::Color.analyze(@pdf.render)
     colors.color_space.should == :DeviceCMYK
     colors.stroke_color_space_count[:DeviceCMYK].should == 2
   end
-  
+
   it "should use the correct dash setting after restoring and starting new page" do
     @pdf.dash 5
     @pdf.save_graphics_state
     @pdf.dash 10
     @pdf.graphic_state.dash[:dash].should == 10
-    @pdf.restore_graphics_state 
+    @pdf.restore_graphics_state
     @pdf.start_new_page
     @pdf.graphic_state.dash[:dash].should == 5
   end
-  
+
+  it "should round dash values to four decimal places" do
+    @pdf.dash 5.12345
+    @pdf.graphic_state.dash_setting.should == "[5.1235 5.1235] 0.0 d"
+  end
+
+  it "should raise an error when dash is called w. a zero length or space" do
+    expect { @pdf.dash(0) }.to raise_error(ArgumentError)
+    expect { @pdf.dash([0]) }.to raise_error(ArgumentError)
+    expect { @pdf.dash([0,0]) }.to raise_error(ArgumentError)
+    expect { @pdf.dash([0,0,0,1]) }.to raise_error(ArgumentError)
+  end
+
   it "the current graphic state should keep track of previous unchanged settings" do
     @pdf.stroke_color '000000'
     @pdf.save_graphics_state
     @pdf.dash 5
     @pdf.save_graphics_state
     @pdf.cap_style :round
-    @pdf.save_graphics_state 
+    @pdf.save_graphics_state
     @pdf.fill_color 0, 0, 100, 0
     @pdf.save_graphics_state
-    
-    @pdf.graphic_state.stroke_color.should == "000000" 
+
+    @pdf.graphic_state.stroke_color.should == "000000"
     @pdf.graphic_state.join_style.should == :miter
-    @pdf.graphic_state.fill_color.should == [0, 0, 100, 0] 
-    @pdf.graphic_state.cap_style.should == :round 
-    @pdf.graphic_state.color_space.should == {:fill=>:DeviceCMYK, :stroke=>:DeviceRGB} 
+    @pdf.graphic_state.fill_color.should == [0, 0, 100, 0]
+    @pdf.graphic_state.cap_style.should == :round
+    @pdf.graphic_state.color_space.should == {:fill=>:DeviceCMYK, :stroke=>:DeviceRGB}
     @pdf.graphic_state.dash.should == {:space=>5, :phase=>0, :dash=>5}
     @pdf.graphic_state.line_width.should == 1
   end
-    
-    
-  
+
+
+
   it "should not add extra graphic space closings when rendering multiple times" do
     @pdf.render
     state = PDF::Inspector::Graphics::State.analyze(@pdf.render)
     state.save_graphics_state_count.should == 1
     state.restore_graphics_state_count.should == 1
   end
-  
+
   it "should add extra graphic state enclosings when content is added on multiple renderings" do
     @pdf.render
     @pdf.text "Adding a bit more content"
@@ -462,7 +476,7 @@ describe "When using graphics states" do
     state.save_graphics_state_count.should == 2
     state.restore_graphics_state_count.should == 2
   end
-  
+
   it "adds extra graphic state enclosings when new settings are applied on multiple renderings" do
     @pdf.render
     @pdf.stroke_color 0, 0, 0, 0
@@ -470,13 +484,31 @@ describe "When using graphics states" do
     state.save_graphics_state_count.should == 2
     state.restore_graphics_state_count.should == 2
   end
-    
-  
+
+
   it "should raise_error error if closing an empty graphic stack" do
     lambda {
       @pdf.render
       @pdf.restore_graphics_state
-    }.should raise_error(Prawn::Errors::EmptyGraphicStateStack)
+    }.should raise_error(PDF::Core::Errors::EmptyGraphicStateStack)
+  end
+
+  it "should copy mutable attributes when passing a previous_state to the initializer" do
+    new_state = PDF::Core::GraphicState.new(@pdf.graphic_state)
+
+    [:color_space, :dash, :fill_color, :stroke_color].each do |attr|
+      new_state.send(attr).should == @pdf.graphic_state.send(attr)
+      new_state.send(attr).should_not equal(@pdf.graphic_state.send(attr))
+    end
+  end
+
+  it "should copy mutable attributes when duping" do
+    new_state = @pdf.graphic_state.dup
+
+    [:color_space, :dash, :fill_color, :stroke_color].each do |attr|
+      new_state.send(attr).should == @pdf.graphic_state.send(attr)
+      new_state.send(attr).should_not equal(@pdf.graphic_state.send(attr))
+    end
   end
 end
 
@@ -485,19 +517,19 @@ describe "When using transformation matrix" do
 
   # Note: The (approximate) number of significant decimal digits of precision in fractional
   # part is 5 (PDF Reference, Third Edition, p. 706)
-  
+
   it "should send the right content on transformation_matrix" do
-    @pdf.expects(:add_content).with('1.00000 0.00000 0.12346 -1.00000 5.50000 20.00000 cm')
+    @pdf.renderer.expects(:add_content).with('1.00000 0.00000 0.12346 -1.00000 5.50000 20.00000 cm')
     @pdf.transformation_matrix 1, 0, 0.123456789, -1.0, 5.5, 20
   end
-    
+
   it "should use fixed digits with very small number" do
     values = Array.new(6, 0.000000000001)
     string = Array.new(6, "0.00000").join " "
-    @pdf.expects(:add_content).with("#{string} cm")
+    @pdf.renderer.expects(:add_content).with("#{string} cm")
     @pdf.transformation_matrix *values
   end
-    
+
   it "should be received by the inspector" do
     @pdf.transformation_matrix 1, 0, 0, -1, 5.5, 20
     matrices = PDF::Inspector::Graphics::Matrix.analyze(@pdf.render)
@@ -508,16 +540,16 @@ describe "When using transformation matrix" do
     values = Array.new(6, 0.000000000001)
     string = Array.new(6, "0.00000").join " "
     process = sequence "process"
-    
+
     @pdf.expects(:save_graphics_state).with().in_sequence(process)
-    @pdf.expects(:add_content).with("#{string} cm").in_sequence(process)
+    @pdf.renderer.expects(:add_content).with("#{string} cm").in_sequence(process)
     @pdf.expects(:do_something).with().in_sequence(process)
     @pdf.expects(:restore_graphics_state).with().in_sequence(process)
     @pdf.transformation_matrix(*values) do
       @pdf.do_something
     end
   end
-    
+
 end
 
 describe "When using transformations shortcuts" do
